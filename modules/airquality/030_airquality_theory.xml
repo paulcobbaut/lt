@@ -1,0 +1,317 @@
+<?hard-pagebreak?>
+<section><title>the setup</title>
+	<para>The project starts by connecting eight gas sensors and one temperature/humidity sensor to the <command>Arduino</command>. The gas sensors are MQ-2 to MQ-9 (available on aliexpress.com), the temperature/humidity is a DHT11 (the blue-ish thing under the yellow cables).</para>
+	<mediaobject><imageobject><imagedata fileref="images/mq-sensors.jpg" format="EPS" align="center"></imagedata></imageobject></mediaobject>
+	<para>The <command>Arduino</command> is connected via usb to a <command>Raspberry Pi</command>, which in turn has a wireless connection in a local network.</para>
+	<mediaobject><imageobject><imagedata fileref="images/raspberry-wifi-arduino.jpg" format="EPS" align="center"></imagedata></imageobject></mediaobject>
+<?hard-pagebreak?>
+	<para>The <command>Raspberry Pi</command> uses passworless ssh to a server on the internet. There it updates an <command>rrdtool</command> database, putting the following graphs on a website.</para>
+	<mediaobject><imageobject><imagedata fileref="images/rrdtool-air.jpg" format="EPS" align="center"></imagedata></imageobject></mediaobject>
+	<para>The url of this website is:</para>
+	<screen>http://herrdebby.netsec.be/air/</screen>
+</section>
+<?hard-pagebreak?>
+<section><title>multiplexing analog sensors</title>
+<para>The Arduino has only 6 analog ports (A0 - A6). There are Arduino's with more ports, but this project uses analog multiplexers instead.</para>
+<para>The <command>CD4051BE</command> is a cheap analog multiplexer. It allows for eight analog signals to be multiplexed to one analog port on the Arduino.</para>
+<screen>pic schema drawing</screen>
+<para>The code on Arduino to test the multiplexer looks like this.</para>
+<screen>const int compin = A0;  // Analog 0 connected to COM on CD4051BE
+const int mq2 = 0; // MQ-2 sensor connected to CD4051BE channel 0
+const int mq3 = 1; // MQ-3 sensor connected to CD4051BE channel 1
+const int mq4 = 2; // MQ-4 sensor connected to CD4051BE channel 2
+const int mq5 = 3; // MQ-5 sensor connected to CD4051BE channel 3
+const int mq6 = 4; // MQ-6 sensor connected to CD4051BE channel 4
+const int mq7 = 5; // MQ-7 sensor connected to CD4051BE channel 5
+const int mq8 = 6; // MQ-8 sensor connected to CD4051BE channel 6
+const int mq9 = 7; // MQ-9 sensor connected to CD4051BE channel 7
+
+void setup() {
+  pinMode (2, OUTPUT); // CD4051BE binary control input A
+  pinMode (3, OUTPUT); // CD4051BE binary control input B
+  pinMode (4, OUTPUT); // CD4051BE binary control input C
+  Serial.begin(9600);
+}
+
+void loop() {
+  int value = 0;
+  value = read_multiplex ( mq2 );
+  Serial.print(" mq2: ");
+  Serial.print(value);
+  value = read_multiplex ( mq3 );
+  Serial.print(" mq3: ");
+  Serial.print(value);
+  value = read_multiplex ( mq4 );
+  Serial.print(" mq4: ");
+  Serial.print(value);
+  value = read_multiplex ( mq5 );
+  Serial.print(" mq5: ");
+  Serial.print(value);
+  value = read_multiplex ( mq6 );
+  Serial.print(" mq6: ");
+  Serial.print(value);
+  value = read_multiplex ( mq7 );
+  Serial.print(" mq7: ");
+  Serial.print(value);
+  value = read_multiplex ( mq8 );
+  Serial.print(" mq8: ");
+  Serial.print(value);
+  value = read_multiplex ( mq9 );
+  Serial.print(" mq9: ");
+  Serial.println(value);
+  delay(9000);
+}
+
+int read_multiplex(int sensor) {
+  int value = 0;
+  byte r0 = bitRead (sensor,0);
+  byte r1 = bitRead (sensor,1);
+  byte r2 = bitRead (sensor,2);
+  digitalWrite (2, r2);
+  digitalWrite (3, r1);
+  digitalWrite (4, r0);
+  value = analogRead(compin);
+  return value;
+}</screen>
+<para>The result on the serial console looks like this screenshot. Note that it takes a while for the sensors to stabilize.</para>
+<screen>pic screenshot serial console</screen>
+</section>
+<?hard-pagebreak?>
+<section><title>arduino sending data</title>
+<para>Below is the complete program running on the <command>arduino</command>. It uses the standard <command>serial.print</command> function to send data over the <command>usb cable</command>.</para>
+<para></para>
+<screen>// lib temp+humidity
+#include "DHT.h"
+#define DHTPIN 8       // temp+humidity pin
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+// end temp+humidity
+
+// multiplexer CD4051BE
+const int compin = A0;  // Analog 0 connected to COM on CD4051BE
+const int mq2 = 0; // MQ-2 sensor connected to CD4051BE channel 0
+const int mq3 = 1; // MQ-3 sensor connected to CD4051BE channel 1
+const int mq4 = 2; // MQ-4 sensor connected to CD4051BE channel 2
+const int mq5 = 3; // MQ-5 sensor connected to CD4051BE channel 3
+const int mq6 = 4; // MQ-6 sensor connected to CD4051BE channel 4
+const int mq7 = 5; // MQ-7 sensor connected to CD4051BE channel 5
+const int mq8 = 6; // MQ-8 sensor connected to CD4051BE channel 6
+const int mq9 = 7; // MQ-9 sensor connected to CD4051BE channel 7
+// end multiplexer
+
+// one or half minute loops
+const unsigned long OneMinute = 60 * 1000UL;
+const unsigned long HalfMinute = 30 * 1000UL;
+// end one or half minute loops
+
+void setup() {
+  pinMode (2, OUTPUT); // CD4051BE binary control input A
+  pinMode (3, OUTPUT); // CD4051BE binary control input B
+  pinMode (4, OUTPUT); // CD4051BE binary control input C
+  Serial.begin(9600);
+}
+
+void loop()
+{
+ static unsigned long lastSampleTime = 0 - HalfMinute;
+ unsigned long now = millis();
+ if (now - lastSampleTime >= HalfMinute)
+ {
+  // one minute loop
+  lastSampleTime += HalfMinute;
+  Serial.print(now / 1000);
+  // end one minute loop
+
+  // multiplexer sensors
+  int value = 0;
+  value = read_multiplex ( mq2 );
+  Serial.print(" ");
+  Serial.print(value);
+  value = read_multiplex ( mq3 );
+  Serial.print(" ");
+  Serial.print(value);
+  value = read_multiplex ( mq4 );
+  Serial.print(" ");
+  Serial.print(value);
+  value = read_multiplex ( mq5 );
+  Serial.print(" ");
+  Serial.print(value);
+  value = read_multiplex ( mq6 );
+  Serial.print(" ");
+  Serial.print(value);
+  value = read_multiplex ( mq7 );
+  Serial.print(" ");
+  Serial.print(value);
+  value = read_multiplex ( mq8 );
+  Serial.print(" ");
+  Serial.print(value);
+  value = read_multiplex ( mq9 );
+  Serial.print(" ");
+  Serial.print(value);
+  // end multiplexer sensors
+  
+  // temperature + humidity reading (takes half a second)
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+  Serial.print(" ");
+  Serial.print(h,0);
+  Serial.print(" ");
+  Serial.println(t,0);  // end the line
+  // end temperature + humidity
+ }
+ }
+
+int read_multiplex(int sensor) {
+  int value = 0;
+  byte r0 = bitRead (sensor,0);
+  byte r1 = bitRead (sensor,1);
+  byte r2 = bitRead (sensor,2);
+  digitalWrite (2, r2);
+  digitalWrite (3, r1);
+  digitalWrite (4, r0);
+  value = analogRead(compin);
+  return value;
+}</screen>
+<para></para>
+<screen></screen>
+</section>
+<?hard-pagebreak?>
+<section><title>raspberry pi reading data</title>
+<para>The <command>arduino</command> is connected to the <command>raspberry pi</command> with a standard <command>usb cable</command>. This cable provides current to the <command>arduino</command> but also serves as a serial communication line between the two devices.</para>
+<para>Some online sources advice to comment out the last line in <command>/etc/inittab</command> before using serial communication between <command>raspberry pi</command> and <command>arduino</command>.</para>
+<para>I am not sure this is mandatory... here is the screenshot.</para>
+<screen>root@airpi ~# <command>tail -2 /etc/inittab</command>
+#Spawn a getty on Raspberry Pi serial line
+#T0:23:respawn:/sbin/getty -L ttyAMA0 115200 vt100
+root@airpi ~#</screen>
+<para>Here is a screenshot of the script that is running every hour.</para>
+<screen>root@airpi ~# <command>cat air2rrd.sh</command>
+#!/bin/bash
+#
+# Paul Cobbaut, July 2015
+#
+# read air quality data from Arduino
+# format data for rrdtool
+# send data to herrdebby
+# crontab this every hour
+
+nu=$(date +%s)
+outfile=/root/output.arduino.air.$nu
+outherr='air@herrdebby:~/data_received/'
+
+# init arduino serial connection and connect to fd 3
+stty -F /dev/ttyACM0 ispeed 9600 ospeed 9600 raw
+exec 3&#060;>/dev/ttyACM0
+
+# loop for one hour (arduino samples have 30 second intervals)
+for i in {1..120}
+do
+ # read from stream 3
+ read -u 3 airq
+ # replace spaces with colons
+ airc=$(echo $airq | tr ' ' ':')
+ # precede with time in seconds, send to outputfile
+ echo -e $(date +%s)':'$airc >> $outfile
+done
+
+# close fd
+exec 3>&#038;-
+
+# copy data to herrdebby
+scp $outfile $outherr &#038;&#038; rm -rf $outfile
+root@airpi ~#</screen>
+<para>This last line sends the output file to the webserver (named herrdebby).</para>
+<para>The script above runs exactly fifty nine and a half minutes, and is started every hour by <command>crontab</command>.</para>
+<screen>root@airpi ~# <command>crontab -l</command>
+# m h  dom mon dow   command
+0 * * * * /root/air2rrd.sh
+root@airpi ~#</screen>
+</section>
+<?hard-pagebreak?>
+<section><title>creating rrdtool database</title>
+<para>I chose <command>rrdtool</command> because it can create nice graphs, and because it is very conservative in disk space usage.</para>
+<para>The database needs to be created only once, here is the script.</para>
+<screen>air@herrdebby~/bin$ <command>cat createdb.sh</command>
+#!/bin/bash
+
+rrdtool=/usr/bin/rrdtool
+db=/home/air/rrddb/air.rrd
+img=/var/www/air
+d=$(date +%s)
+let d=$d-3600 # one hour ago
+
+if [ ! -e $db ]
+then
+        $rrdtool create $db --start $d --step 30 -s 30 \
+        DS:tmp:GAUGE:30:0:50 \
+        DS:hum:GAUGE:30:0:100 \
+        DS:mq2:GAUGE:30:0:1023 \
+        DS:mq3:GAUGE:30:0:1023 \
+        DS:mq4:GAUGE:30:0:1023 \
+        DS:mq5:GAUGE:30:0:1023 \
+        DS:mq6:GAUGE:30:0:1023 \
+        DS:mq7:GAUGE:30:0:1023 \
+        DS:mq8:GAUGE:30:0:1023 \
+        DS:mq9:GAUGE:30:0:1023 \
+        RRA:AVERAGE:0.5:1:240 \
+        RRA:AVERAGE:0.5:12:240 \
+        RRA:AVERAGE:0.5:7:240 \
+        RRA:AVERAGE:0.5:7:240
+fi
+
+air@herrdebby~/bin$</screen>
+<para></para>
+<para></para>
+<screen></screen>
+</section>
+<?hard-pagebreak?>
+<section><title>filling the database</title>
+<para>The output file from the <command>raspberry pi</command> is sent to a local directory on this server and is read every hour (on the 0 minute).</para>
+<para>(Since both servers use ntp, this gives a 30 second window between sending/receiving the file and processing it.)</para>
+<para>This is the script.</para>
+<screen>air@herrdebby~/bin$ cat <command>data.sh</command>
+#!/bin/bash
+
+rrdtool=/usr/bin/rrdtool
+db=/home/air/rrddb/air.rrd
+rrdsources='mq2:mq3:mq4:mq5:mq6:mq7:mq8:mq9:hum:tmp'
+outputdir='/home/air/data_received'
+
+dos2unix $outputdir/*
+
+for ofile in $(echo $outputdir/*)
+do
+ while read line
+   do
+    cdata=$(echo $line | cut -d':' -f1,3-)
+    $rrdtool update $db -t $rrdsources $(echo -e $cdata'\n')
+   done &#060; $ofile
+done
+
+rm -rf $outputdir/*
+/home/air/bin/graph.sh
+air@herrdebby~/bin$</screen>
+<para>The script finishes by calling the graph.sh script to regenerate the graphs.</para>
+<para></para>
+<screen></screen>
+</section>
+<?hard-pagebreak?>
+<section><title>i</title>
+<para></para>
+<para></para>
+<screen></screen>
+<para></para>
+<para></para>
+<screen></screen>
+<para><command>i</command><indexterm><primary>i</primary></indexterm></para>
+</section>
+<?hard-pagebreak?>
+<section><title>i</title>
+<para></para>
+<para></para>
+<screen></screen>
+<para></para>
+<para></para>
+<screen></screen>
+<para><command>i</command><indexterm><primary>i</primary></indexterm></para>
+</section>

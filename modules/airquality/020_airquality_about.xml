@@ -1,0 +1,1 @@
+<para>This project uses <command>Linux</command>, an <command>Arduino</command>, a <command>Raspberry Pi</command>, several <command>mq</command> sensors, <command>apache2</command> and <command>rrdtool</command> to measure air quality with nice online graphs.</para>
